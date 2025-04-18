@@ -1,16 +1,82 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <title>ログイン</title>
+  <meta charset="UTF-8"/>
+  <title>検証</title>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background-color: #f5f5f5;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+    }
+    
+    .login-container {
+      background: white;
+      padding: 2rem;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      width: 100%;
+      max-width: 360px;
+      text-align: center;
+    }
+    
+    h2 {
+      color: #333;
+      margin-bottom: 1.5rem;
+    }
+    
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    
+    input[type="email"] {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      padding: 12px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 100%;
+      transition: background-color 0.3s;
+    }
+    
+    button:hover {
+      background-color: #45a049;
+    }
+    
+    .error-message {
+      color: #f44336;
+      margin-top: 1rem;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-  <h2>ログイン</h2>
-  <input type="email" id="email" placeholder="メールアドレス" required />
-  <button onclick="login()">ログイン</button>
+  <div class="login-container">
+    <h2>Ko-Fiで使用していたメールアドレスで続行</h2>
+    <div class="form-group">
+      <input type="email" id="email" placeholder="メールアドレス" required />
+    </div>
+    <button onclick="login()">続行</button>
+    <div id="error-message" class="error-message"></div>
+  </div>
 
   <script>
     // Firebase 初期化
@@ -24,38 +90,66 @@
     const db = firebase.firestore();
 
     function getDeviceId() {
-      // 仮のデバイスID（端末でユニークになりそうな文字列）
-      return navigator.userAgent + "_" + Date.now();
+      // LocalStorageを使用してより永続的なIDを生成
+      let deviceId = localStorage.getItem('deviceId');
+      if (!deviceId) {
+        deviceId = 'device_' + navigator.userAgent + '_' + Date.now();
+        localStorage.setItem('deviceId', deviceId);
+      }
+      return deviceId;
     }
 
     async function login() {
+      await firebase.auth().signInAnonymously();
       const email = document.getElementById("email").value;
-      const docRef = db.collection("customer_emails").doc(email);
-      const doc = await docRef.get();
-
-      if (!doc.exists) {
-        alert("このメールは登録されていません。");
+      const errorMessage = document.getElementById("error-message");
+      
+      // 入力検証
+      if (!email || !email.includes('@')) {
+        errorMessage.textContent = "有効なメールアドレスを入力してください";
+        errorMessage.style.display = "block";
         return;
       }
+      
+      try {
+        // セキュリティルールを変更した場合の方法
+        const docRef = db.collection("customer_emails").doc(email);
+        const doc = await docRef.get();
+        
+        if (!doc.exists) {
+          // 登録されていない場合は直接auth_failedへリダイレクト
+          window.location.href = "~/auth_failed";
+          return;
+        }
 
-      const data = doc.data();
-      let count = data.count || 0;
+        const data = doc.data();
+        let count = data.count || 0;
 
-      if (count >= 5) {
-        window.location.href = "/auth_failed";
-      } else {
-        await docRef.update({
-          count: count + 1
-        });
+        if (count >= 5) {
+          window.location.href = "/auth_failed";
+        } else {
+          await docRef.update({
+            count: count + 1,
+            devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId()),
+            lastLogin: new Date()
+          });
 
-        // デバイスIDを保存（別コレクションに記録してもOK）
-        await docRef.update({
-          devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId())
-        });
-
-        window.location.href = "/auth_complete";
+          window.location.href = "/auth_complete";
+        }
+      } catch (error) {
+        console.error("エラーが発生しました:", error);
+        errorMessage.textContent = "ログイン処理中にエラーが発生しました";
+        errorMessage.style.display = "block";
       }
     }
+    
+    // Enterキーでもログイン可能に
+    document.getElementById("email").addEventListener("keypress", function(event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        login();
+      }
+    });
   </script>
 </body>
 </html>
