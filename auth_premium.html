@@ -1,0 +1,61 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>ログイン</title>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <h2>ログイン</h2>
+  <input type="email" id="email" placeholder="メールアドレス" required />
+  <button onclick="login()">ログイン</button>
+
+  <script>
+    // Firebase 初期化
+    const firebaseConfig = {
+      apiKey: "AIzaSyBp7h6GmHhpv1PFUhygwFHkuNDWU9_OOsE",
+      authDomain: "minecraft-auto-backuper.firebaseapp.com",
+      projectId: "minecraft-auto-backuper",
+      // 他必要に応じて...
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    function getDeviceId() {
+      // 仮のデバイスID（端末でユニークになりそうな文字列）
+      return navigator.userAgent + "_" + Date.now();
+    }
+
+    async function login() {
+      const email = document.getElementById("email").value;
+      const docRef = db.collection("customer_emails").doc(email);
+      const doc = await docRef.get();
+
+      if (!doc.exists) {
+        alert("このメールは登録されていません。");
+        return;
+      }
+
+      const data = doc.data();
+      let count = data.count || 0;
+
+      if (count >= 5) {
+        window.location.href = "/auth_failed";
+      } else {
+        await docRef.update({
+          count: count + 1
+        });
+
+        // デバイスIDを保存（別コレクションに記録してもOK）
+        await docRef.update({
+          devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId())
+        });
+
+        window.location.href = "/auth_complete";
+      }
+    }
+  </script>
+</body>
+</html>
