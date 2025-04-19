@@ -66,6 +66,15 @@
       margin-top: 1rem;
       display: none;
     }
+    
+    .warning-message {
+      color: #ff9800;
+      margin-top: 1rem;
+      padding: 10px;
+      background-color: #fff3e0;
+      border-radius: 4px;
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -76,9 +85,33 @@
     </div>
     <button onclick="login()">続行</button>
     <div id="error-message" class="error-message"></div>
+    <div id="adblock-warning" class="warning-message">
+      あなたは広告ブロッカーをお使いのようです。
+      有効化していると認証時にエラーが発生し正しく完了しない可能性があるため、
+      OFFにすることをおすすめします
+    </div>
   </div>
 
   <script>
+    // 広告ブロッカー検出のためのダミー要素
+    const adBlockDetection = document.createElement('div');
+    adBlockDetection.className = 'ads ad adsbox doubleclick ad-placement carbon-ads';
+    adBlockDetection.style.height = '1px';
+    adBlockDetection.style.width = '1px';
+    adBlockDetection.style.position = 'absolute';
+    adBlockDetection.style.top = '-1000px';
+    document.body.appendChild(adBlockDetection);
+
+    // 広告ブロッカーの検出
+    setTimeout(() => {
+      if (adBlockDetection.offsetHeight === 0 || 
+          adBlockDetection.clientHeight === 0 || 
+          getComputedStyle(adBlockDetection).display === 'none' || 
+          getComputedStyle(adBlockDetection).height === '0px') {
+        document.getElementById('adblock-warning').style.display = 'block';
+      }
+    }, 100);
+
     // Firebase 初期化
     const firebaseConfig = {
       apiKey: "AIzaSyBp7h6GmHhpv1PFUhygwFHkuNDWU9_OOsE",
@@ -99,6 +132,23 @@
       return deviceId;
     }
 
+    async function checkVPN(ipAddress) {
+      try {
+        // VPN検出APIを使用
+        const vpnResponse = await fetch(`https://vpnapi.io/api/${ipAddress}?key=YOUR_API_KEY_HERE`);
+        const vpnData = await vpnResponse.json();
+        
+        // VPNまたはプロキシの検出
+        if (vpnData.security && (vpnData.security.vpn || vpnData.security.proxy || vpnData.security.tor || vpnData.security.relay)) {
+          return true; // VPNを検出
+        }
+        return false;
+      } catch (error) {
+        console.error("VPN検出中にエラーが発生しました:", error);
+        return false; // エラーの場合はVPNなしと仮定
+      }
+    }
+
     async function login() {
         await firebase.auth().signInAnonymously();
         const email = document.getElementById("email").value;
@@ -115,11 +165,18 @@
             // IPアドレスを取得
             let ipAddress = "unknown";
             try {
-            const ipResponse = await fetch('https://api.ipify.org?format=json');
-            const ipData = await ipResponse.json();
-            ipAddress = ipData.ip;
+              const ipResponse = await fetch('https://api.ipify.org?format=json');
+              const ipData = await ipResponse.json();
+              ipAddress = ipData.ip;
+              
+              // VPNチェック
+              const isVPN = await checkVPN(ipAddress);
+              if (isVPN) {
+                window.location.href = "/auth_failed_vpn";
+                return;
+              }
             } catch (ipError) {
-            console.error("IPアドレスの取得に失敗しました:", ipError);
+              console.error("IPアドレスの取得に失敗しました:", ipError);
             }
             
             // セキュリティルールを変更した場合の方法
@@ -127,9 +184,9 @@
             const doc = await docRef.get();
             
             if (!doc.exists) {
-            // 登録されていない場合は直接auth_failedへリダイレクト
-            window.location.href = "~/auth_failed";
-            return;
+              // 登録されていない場合は直接auth_failedへリダイレクト
+              window.location.href = "~/auth_failed";
+              return;
             }
 
             const data = doc.data();
@@ -140,26 +197,27 @@
             
             // Firebaseドキュメント更新
             await docRef.update({
-            count: count,
-            devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId()),
-            lastLogin: new Date(),
-            ipAddress: ipAddress  // IPアドレスを保存
+              count: count,
+              devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId()),
+              lastLogin: new Date(),
+              ipAddress: ipAddress,  // IPアドレスを保存
+              vpnDetected: false     // VPN検出結果を保存
             });
             
             console.log("更新完了: count = " + count); // デバッグ用
             
             // 更新後にチェック
             if (count > 5) {
-            window.location.href = "/auth_failed";
+              window.location.href = "/auth_failed";
             } else {
-            window.location.href = "/auth_complete";
+              window.location.href = "/auth_complete";
             }
         } catch (error) {
             console.error("エラーが発生しました:", error);
             errorMessage.textContent = "ログイン処理中にエラーが発生しました";
             errorMessage.style.display = "block";
         }
-        }
+    }
     
     // Enterキーでもログイン可能に
     document.getElementById("email").addEventListener("keypress", function(event) {
