@@ -100,48 +100,66 @@
     }
 
     async function login() {
-      await firebase.auth().signInAnonymously();
-      const email = document.getElementById("email").value;
-      const errorMessage = document.getElementById("error-message");
-      
-      // 入力検証
-      if (!email || !email.includes('@')) {
-        errorMessage.textContent = "有効なメールアドレスを入力してください";
-        errorMessage.style.display = "block";
-        return;
-      }
-      
-      try {
-        // セキュリティルールを変更した場合の方法
-        const docRef = db.collection("customer_emails").doc(email);
-        const doc = await docRef.get();
+        await firebase.auth().signInAnonymously();
+        const email = document.getElementById("email").value;
+        const errorMessage = document.getElementById("error-message");
         
-        if (!doc.exists) {
-          // 登録されていない場合は直接auth_failedへリダイレクト
-          window.location.href = "/auth_failed";
-          return;
+        // 入力検証
+        if (!email || !email.includes('@')) {
+            errorMessage.textContent = "有効なメールアドレスを入力してください";
+            errorMessage.style.display = "block";
+            return;
         }
+        
+        try {
+            // IPアドレスを取得
+            let ipAddress = "unknown";
+            try {
+            const ipResponse = await fetch('https://api.ipify.org?format=json');
+            const ipData = await ipResponse.json();
+            ipAddress = ipData.ip;
+            } catch (ipError) {
+            console.error("IPアドレスの取得に失敗しました:", ipError);
+            }
+            
+            // セキュリティルールを変更した場合の方法
+            const docRef = db.collection("customer_emails").doc(email);
+            const doc = await docRef.get();
+            
+            if (!doc.exists) {
+            // 登録されていない場合は直接auth_failedへリダイレクト
+            window.location.href = "~/auth_failed";
+            return;
+            }
 
-        const data = doc.data();
-        let count = data.count || 0;
-
-        if (count >= 5) {
-          window.location.href = "/auth_failed";
-        } else {
-          await docRef.update({
-            count: count + 1,
+            const data = doc.data();
+            let count = data.count || 0;
+            
+            // 更新処理を先に行い、その後条件チェックでリダイレクト
+            count += 1; // カウントを増やす
+            
+            // Firebaseドキュメント更新
+            await docRef.update({
+            count: count,
             devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId()),
-            lastLogin: new Date()
-          });
-
-          window.location.href = "/auth_complete";
+            lastLogin: new Date(),
+            ipAddress: ipAddress  // IPアドレスを保存
+            });
+            
+            console.log("更新完了: count = " + count); // デバッグ用
+            
+            // 更新後にチェック
+            if (count > 5) {
+            window.location.href = "/auth_failed";
+            } else {
+            window.location.href = "/auth_complete";
+            }
+        } catch (error) {
+            console.error("エラーが発生しました:", error);
+            errorMessage.textContent = "ログイン処理中にエラーが発生しました";
+            errorMessage.style.display = "block";
         }
-      } catch (error) {
-        console.error("エラーが発生しました:", error);
-        errorMessage.textContent = "ログイン処理中にエラーが発生しました";
-        errorMessage.style.display = "block";
-      }
-    }
+        }
     
     // Enterキーでもログイン可能に
     document.getElementById("email").addEventListener("keypress", function(event) {
