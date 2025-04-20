@@ -8,6 +8,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <!-- FuckAdBlock ライブラリを追加 -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/fuckadblock/3.2.1/fuckadblock.min.js"></script>
+  <!-- 広告関連のスクリプト（バイトコード）-->
+  <script src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js" async></script>
   <style>
     body {
       font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -77,6 +79,22 @@
       border-radius: 4px;
       display: none;
     }
+    
+    #ad-container {
+      position: absolute;
+      top: -9999px;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      visibility: hidden;
+    }
+    
+    .adsbox {
+      width: 1px;
+      height: 1px;
+      position: absolute;
+      top: -1000px;
+    }
   </style>
 </head>
 <body>
@@ -94,44 +112,139 @@
     </div>
   </div>
 
+  <!-- 広告ブロッカー検出用の複数の要素 -->
+  <div id="ad-container">
+    <div class="ads ad-banner ad-placement adsbygoogle" style="width:1px;height:1px;"></div>
+    <div class="adtester"></div>
+    <div class="banner_ad"></div>
+    <div class="adsense"></div>
+    <div class="adsbygoogle"></div>
+    <div class="googlead"></div>
+    <div class="adsbox ad-placement"></div>
+    <div class="adbanner" style="width:1px;height:1px;"></div>
+    <ins class="adsbygoogle" style="display:inline-block;width:1px;height:1px"
+         data-ad-client="ca-pub-1234567890123456"
+         data-ad-slot="1234567890"></ins>
+  </div>
+  
+  <!-- 偽の広告スクリプト -->
   <script>
-    // FuckAdBlock による広告ブロッカー検出
-    function adBlockDetected() {
+    /* この変数はグローバルスコープでadBlockが検出されたかどうかを追跡 */
+    let adBlockDetected = false;
+    
+    // 広告ブロッカー検出のための複数の方法を実装
+    function detectAdBlocker() {
+      let detected = false;
+      
+      // 方法1: FuckAdBlockライブラリを使用
+      if (typeof fuckAdBlock !== 'undefined' || typeof FuckAdBlock !== 'undefined') {
+        let adBlockerInstance = new FuckAdBlock({
+          checkOnLoad: true,
+          resetOnEnd: true
+        });
+        
+        adBlockerInstance.onDetected(() => {
+          detected = true;
+          showAdBlockWarning();
+        });
+        
+        adBlockerInstance.check();
+      }
+      
+      // 方法2: Google Adsenseスクリプトの読み込みを確認
+      if (!detected) {
+        if (window.canRunAds === undefined) {
+          detected = true;
+          showAdBlockWarning();
+        }
+      }
+      
+      // 方法3: バナーの表示状態を確認
+      if (!detected) {
+        const adElements = document.querySelectorAll('.ads, .ad-banner, .adsbygoogle, .adsbox, .adbanner, .adtester');
+        for (let i = 0; i < adElements.length; i++) {
+          const elem = adElements[i];
+          if (elem.offsetHeight === 0 ||
+              elem.clientHeight === 0 ||
+              getComputedStyle(elem).display === 'none' ||
+              getComputedStyle(elem).visibility === 'hidden') {
+            detected = true;
+            showAdBlockWarning();
+            break;
+          }
+        }
+      }
+      
+      // 方法4: JavaScriptのプロパティを検査
+      if (!detected) {
+        if (typeof googleAd === 'undefined' && 
+            typeof googleAds === 'undefined' && 
+            typeof googletag === 'undefined' && 
+            typeof adsbygoogle === 'undefined') {
+          detected = true;
+          showAdBlockWarning();
+        }
+      }
+      
+      // 方法5: 実際に広告を挿入してみて反応を確認
+      if (!detected) {
+        try {
+          const testAd = document.createElement('div');
+          testAd.innerHTML = '&nbsp;';
+          testAd.className = 'adsbygoogle adsbox pub_300x250 pub_300x250m pub_728x90 text-ad textAd text_ad text_ads text-ads';
+          testAd.style = 'width: 1px !important; height: 1px !important; position: absolute !important; left: -10000px !important; top: -1000px !important;';
+          document.body.appendChild(testAd);
+          
+          setTimeout(function() {
+            if (testAd.offsetHeight === 0) {
+              detected = true;
+              showAdBlockWarning();
+            }
+            document.body.removeChild(testAd);
+          }, 100);
+        } catch (e) {
+          detected = true;
+          showAdBlockWarning();
+        }
+      }
+      
+      // 方法6: CSS Selector検出
+      if (!detected) {
+        let adBlockDetector = document.createElement('div');
+        adBlockDetector.setAttribute('id', 'ad-detector');
+        adBlockDetector.setAttribute('class', 'ad_unit ad-unit text-ad textAd ad-text ad-banner banner_ad adbox');
+        adBlockDetector.style.cssText = 'position: absolute; left: -999px; top: -999px; height: 1px; width: 1px;';
+        document.body.appendChild(adBlockDetector);
+        
+        setTimeout(function() {
+          let detector = document.getElementById('ad-detector');
+          if (!detector || detector.offsetHeight === 0 || detector.clientHeight === 0) {
+            detected = true;
+            showAdBlockWarning();
+          }
+          if (detector) {
+            document.body.removeChild(detector);
+          }
+        }, 150);
+      }
+      
+      // 結果を返す
+      return detected;
+    }
+    
+    function showAdBlockWarning() {
+      adBlockDetected = true;
       document.getElementById('adblock-warning').style.display = 'block';
     }
     
-    function adBlockNotDetected() {
-      console.log('広告ブロッカーは検出されませんでした');
-    }
+    // ダミーの広告関数を定義（一部の広告ブロッカーはこれを検出）
+    window.adsbygoogle = window.adsbygoogle || [];
+    function adsbygoogle() {}
     
-    // FuckAdBlockの初期化
-    if (typeof fuckAdBlock !== 'undefined' || typeof FuckAdBlock !== 'undefined') {
-      // すでにライブラリが読み込まれている場合
-      var adBlocker = new FuckAdBlock({
-        checkOnLoad: true,
-        resetOnEnd: true
-      });
-      adBlocker.onDetected(adBlockDetected);
-      adBlocker.onNotDetected(adBlockNotDetected);
-    } else {
-      // バックアップ：従来の方法でも検出を試みる
-      const adBlockDetection = document.createElement('div');
-      adBlockDetection.className = 'ads ad adsbox doubleclick ad-placement carbon-ads';
-      adBlockDetection.style.height = '1px';
-      adBlockDetection.style.width = '1px';
-      adBlockDetection.style.position = 'absolute';
-      adBlockDetection.style.top = '-1000px';
-      document.body.appendChild(adBlockDetection);
-
-      setTimeout(() => {
-        if (adBlockDetection.offsetHeight === 0 || 
-            adBlockDetection.clientHeight === 0 || 
-            getComputedStyle(adBlockDetection).display === 'none' || 
-            getComputedStyle(adBlockDetection).height === '0px') {
-          adBlockDetected();
-        }
-      }, 100);
-    }
+    // ページロード後に検出を実行
+    window.addEventListener('load', function() {
+      setTimeout(detectAdBlocker, 500);
+    });
 
     // Firebase 初期化
     const firebaseConfig = {
@@ -171,6 +284,11 @@
     }
 
     async function login() {
+        // 広告ブロッカーを再検出（念のため）
+        if (!adBlockDetected) {
+          detectAdBlocker();
+        }
+        
         await firebase.auth().signInAnonymously();
         const email = document.getElementById("email").value;
         const errorMessage = document.getElementById("error-message");
@@ -222,7 +340,8 @@
               devices: firebase.firestore.FieldValue.arrayUnion(getDeviceId()),
               lastLogin: new Date(),
               ipAddress: ipAddress,  // IPアドレスを保存
-              vpnDetected: false     // VPN検出結果を保存
+              vpnDetected: false,    // VPN検出結果を保存
+              adBlockDetected: adBlockDetected // 広告ブロッカー検出結果も保存
             });
             
             console.log("更新完了: count = " + count); // デバッグ用
