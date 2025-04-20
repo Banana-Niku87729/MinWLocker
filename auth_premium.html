@@ -6,6 +6,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <!-- FuckAdBlock ライブラリを追加 -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fuckadblock/3.2.1/fuckadblock.min.js"></script>
   <style>
     body {
       font-family: 'Helvetica Neue', Arial, sans-serif;
@@ -93,24 +95,43 @@
   </div>
 
   <script>
-    // 広告ブロッカー検出のためのダミー要素
-    const adBlockDetection = document.createElement('div');
-    adBlockDetection.className = 'ads ad adsbox doubleclick ad-placement carbon-ads';
-    adBlockDetection.style.height = '1px';
-    adBlockDetection.style.width = '1px';
-    adBlockDetection.style.position = 'absolute';
-    adBlockDetection.style.top = '-1000px';
-    document.body.appendChild(adBlockDetection);
+    // FuckAdBlock による広告ブロッカー検出
+    function adBlockDetected() {
+      document.getElementById('adblock-warning').style.display = 'block';
+    }
+    
+    function adBlockNotDetected() {
+      console.log('広告ブロッカーは検出されませんでした');
+    }
+    
+    // FuckAdBlockの初期化
+    if (typeof fuckAdBlock !== 'undefined' || typeof FuckAdBlock !== 'undefined') {
+      // すでにライブラリが読み込まれている場合
+      var adBlocker = new FuckAdBlock({
+        checkOnLoad: true,
+        resetOnEnd: true
+      });
+      adBlocker.onDetected(adBlockDetected);
+      adBlocker.onNotDetected(adBlockNotDetected);
+    } else {
+      // バックアップ：従来の方法でも検出を試みる
+      const adBlockDetection = document.createElement('div');
+      adBlockDetection.className = 'ads ad adsbox doubleclick ad-placement carbon-ads';
+      adBlockDetection.style.height = '1px';
+      adBlockDetection.style.width = '1px';
+      adBlockDetection.style.position = 'absolute';
+      adBlockDetection.style.top = '-1000px';
+      document.body.appendChild(adBlockDetection);
 
-    // 広告ブロッカーの検出
-    setTimeout(() => {
-      if (adBlockDetection.offsetHeight === 0 || 
-          adBlockDetection.clientHeight === 0 || 
-          getComputedStyle(adBlockDetection).display === 'none' || 
-          getComputedStyle(adBlockDetection).height === '0px') {
-        document.getElementById('adblock-warning').style.display = 'block';
-      }
-    }, 100);
+      setTimeout(() => {
+        if (adBlockDetection.offsetHeight === 0 || 
+            adBlockDetection.clientHeight === 0 || 
+            getComputedStyle(adBlockDetection).display === 'none' || 
+            getComputedStyle(adBlockDetection).height === '0px') {
+          adBlockDetected();
+        }
+      }, 100);
+    }
 
     // Firebase 初期化
     const firebaseConfig = {
